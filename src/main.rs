@@ -5,14 +5,14 @@ use std::{
 };
 
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
 use ratatui::{
     prelude::*,
-    widgets::{self, Block, Borders, ListItem, ListState},
+    widgets::{self, Block, Borders, ListItem, ListState, Paragraph},
 };
 
 struct List<T: Display> {
@@ -68,12 +68,14 @@ impl<T: Display> List<T> {
 
 struct App<'a> {
     list: List<&'a str>,
+    selected_item: Option<&'a str>,
 }
 
 impl<'a> App<'a> {
     fn new(list_items: Vec<&'a str>) -> App<'a> {
         App {
             list: List::new(list_items),
+            selected_item: Option::None,
         }
     }
 }
@@ -112,14 +114,8 @@ fn run_app<B: Backend>(
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
         if crossterm::event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    match key.code {
-                        KeyCode::Char('q') => return Ok(()),
-                        KeyCode::Left | KeyCode::Char('h') => app.list.unselect(),
-                        KeyCode::Down | KeyCode::Char('j') => app.list.next(),
-                        KeyCode::Up | KeyCode::Char('k') => app.list.previous(),
-                        _ => {}
-                    }
+                if handle_key_events(key, &mut app)? {
+                    return Ok(());
                 }
             }
         }
@@ -130,24 +126,57 @@ fn run_app<B: Backend>(
 }
 
 fn ui(frame: &mut Frame, app: &mut App) {
-    let list_items: Vec<widgets::ListItem> = app
-        .list
-        .items
-        .iter()
-        .map(|i| {
-            let lines = vec![Line::from(i.bold()).alignment(Alignment::Center)];
-            ListItem::new(lines).style(Style::default().fg(Color::Black).bg(Color::White))
-        })
-        .collect();
+    match app.selected_item {
+        None => {
+            let list_items: Vec<widgets::ListItem> = app
+                .list
+                .items
+                .iter()
+                .map(|i| {
+                    let lines = vec![Line::from(i.bold()).alignment(Alignment::Center)];
+                    ListItem::new(lines).style(Style::default().fg(Color::Black).bg(Color::White))
+                })
+                .collect();
 
-    let list = widgets::List::new(list_items)
-        .block(Block::default().borders(Borders::ALL).title("List"))
-        .highlight_style(
-            Style::default()
-                .bg(Color::LightGreen)
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol(">> ");
+            let list = widgets::List::new(list_items)
+                .block(Block::default().borders(Borders::ALL).title("List"))
+                .highlight_style(
+                    Style::default()
+                        .bg(Color::LightGreen)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .highlight_symbol(">> ");
 
-    frame.render_stateful_widget(list, frame.size(), &mut app.list.state);
+            frame.render_stateful_widget(list, frame.size(), &mut app.list.state);
+        }
+        Some(s) => {
+            let p = Paragraph::new(s);
+            frame.render_widget(p, frame.size());
+            return;
+        }
+    }
+}
+
+fn handle_key_events(key: KeyEvent, app: &mut App) -> io::Result<bool> {
+    if key.kind == KeyEventKind::Press {
+        match app.selected_item {
+            None => match key.code {
+                KeyCode::Char('q') => return Ok(true),
+                KeyCode::Left | KeyCode::Char('h') => app.list.unselect(),
+                KeyCode::Down | KeyCode::Char('j') => app.list.next(),
+                KeyCode::Up | KeyCode::Char('k') => app.list.previous(),
+                KeyCode::Enter => {
+                    if let Some(i) = app.list.state.selected() {
+                        app.selected_item = Some(app.list.items[i]);
+                    }
+                }
+                _ => {}
+            },
+            Some(s) => match key.code {
+                KeyCode::Esc => app.selected_item = None,
+                _ => {}
+            },
+        }
+    }
+    Ok(false)
 }
