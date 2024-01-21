@@ -10,12 +10,14 @@ use ratatui::{
 };
 use sorting_visualizer::{
     init_vec, shuffle,
-    sorting::{self, Algorithm, Operation},
+    sorting::{Algorithm, Operation},
 };
 use std::{
-    borrow::Borrow,
+    collections::HashMap,
     fmt::Display,
+    hash::Hash,
     io::{self, stdout},
+    ops::Index,
     sync::Mutex,
     thread,
     time::{Duration, Instant},
@@ -74,7 +76,7 @@ impl<T: Display> List<T> {
 
 struct App<'a> {
     list: List<&'a str>,
-    algorithm: Option<AlgorithmStatus>,
+    algorithm: Option<AlgorithmUI>,
 }
 
 impl<'a> App<'a> {
@@ -84,6 +86,80 @@ impl<'a> App<'a> {
             algorithm: Option::None,
         }
     }
+}
+
+const BLOCK_FULL: char = '\u{2588}';
+const BLOCK_HALF: char = '\u{2584}';
+
+struct AlgorithmUI {
+    status: AlgorithmStatus,
+    blocks: Vec<String>,
+    size: Rect,
+}
+
+impl AlgorithmUI {
+    fn new(name: String, size: Rect) -> AlgorithmUI {
+        AlgorithmUI {
+            status: AlgorithmStatus::new(name, item_size(size)),
+            blocks: block_strings(item_size(size)),
+            size,
+        }
+    }
+
+    // todo: optimize
+    fn display_string(&self) -> String {
+        let mut lines = Vec::new();
+        for i in self.status.nums.iter() {
+            lines.push(self.blocks[(*i as usize) - 1].clone());
+        }
+
+        let max_height = self.blocks.last().unwrap().chars().count();
+        let mut result = String::new();
+        for i in 0..max_height {
+            for j in lines.iter() {
+                result.push((*j).chars().nth(max_height - i - 1).unwrap_or(' '));
+            }
+            result.push('\n');
+        }
+        return result;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display_string() {
+        let size_rect = Rect::new(0, 0, 20, 10);
+        let algorithm_ui = AlgorithmUI::new("hello".to_string(), size_rect);
+        println!("{}", algorithm_ui.display_string());
+    }
+
+    #[test]
+    fn test_block_strings() {
+        let blocks = block_strings(10);
+        println!("{:?}", blocks);
+    }
+}
+
+fn block_strings(n: usize) -> Vec<String> {
+    let mut v = Vec::new();
+    for i in 1..n + 1 {
+        let mut s = String::new();
+        for _ in 0..i / 2 {
+            s.push(BLOCK_FULL);
+        }
+        for _ in 0..i % 2 {
+            s.push(BLOCK_HALF);
+        }
+        v.push(s);
+    }
+    return v;
+}
+
+fn item_size(s: Rect) -> usize {
+    return s.width as usize;
 }
 
 struct AlgorithmStatus {
@@ -159,7 +235,7 @@ fn run_app<B: Backend>(
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
         if crossterm::event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                if handle_key_events(key, &mut app)? {
+                if handle_key_events(key, &mut app, terminal.size()?)? {
                     return Ok(());
                 }
             }
@@ -171,7 +247,7 @@ fn run_app<B: Backend>(
 }
 
 fn ui(frame: &mut Frame, app: &mut App) {
-    match &app.algorithm {
+    match &mut app.algorithm {
         None => {
             let list_items: Vec<widgets::ListItem> = app
                 .list
@@ -194,15 +270,15 @@ fn ui(frame: &mut Frame, app: &mut App) {
 
             frame.render_stateful_widget(list, frame.size(), &mut app.list.state);
         }
-        Some(a) => {
-            let p = Paragraph::new(a.name.clone());
+        Some(algorithm_ui) => {
+            let p = Paragraph::new(algorithm_ui.display_string());
             frame.render_widget(p, frame.size());
             return;
         }
     }
 }
 
-fn handle_key_events(key: KeyEvent, app: &mut App) -> io::Result<bool> {
+fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> io::Result<bool> {
     if key.kind == KeyEventKind::Press {
         match app.algorithm {
             None => match key.code {
@@ -213,7 +289,7 @@ fn handle_key_events(key: KeyEvent, app: &mut App) -> io::Result<bool> {
                 KeyCode::Enter => {
                     if let Some(i) = app.list.state.selected() {
                         let name = app.list.items[i];
-                        let algorithm = AlgorithmStatus::new(String::from(name), 10);
+                        let algorithm = AlgorithmUI::new(String::from(name), size);
                         app.algorithm = Some(algorithm);
                     }
                 }
