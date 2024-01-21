@@ -1,9 +1,3 @@
-use std::{
-    fmt::Display,
-    io::{self, stdout},
-    time::{Duration, Instant},
-};
-
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     execute,
@@ -13,6 +7,18 @@ use crossterm::{
 use ratatui::{
     prelude::*,
     widgets::{self, Block, Borders, ListItem, ListState, Paragraph},
+};
+use sorting_visualizer::{
+    init_vec, shuffle,
+    sorting::{self, Algorithm, Operation},
+};
+use std::{
+    borrow::Borrow,
+    fmt::Display,
+    io::{self, stdout},
+    sync::Mutex,
+    thread,
+    time::{Duration, Instant},
 };
 
 struct List<T: Display> {
@@ -68,14 +74,53 @@ impl<T: Display> List<T> {
 
 struct App<'a> {
     list: List<&'a str>,
-    selected_item: Option<&'a str>,
+    algorithm: Option<AlgorithmStatus>,
 }
 
 impl<'a> App<'a> {
     fn new(list_items: Vec<&'a str>) -> App<'a> {
         App {
             list: List::new(list_items),
-            selected_item: Option::None,
+            algorithm: Option::None,
+        }
+    }
+}
+
+struct AlgorithmStatus {
+    nums: Vec<i32>,
+    operations: Vec<Operation>,
+    name: String,
+    proceed: Mutex<bool>,
+}
+
+impl AlgorithmStatus {
+    fn new(name: String, size: usize) -> AlgorithmStatus {
+        let mut v = init_vec(size);
+        shuffle(&mut v);
+        return AlgorithmStatus {
+            nums: v,
+            operations: Vec::new(),
+            name,
+            proceed: Mutex::new(false),
+        };
+    }
+
+    fn proceed(&mut self) {
+        *self.proceed.lock().unwrap() = true;
+    }
+}
+
+impl Algorithm for AlgorithmStatus {
+    fn next(&mut self, operation: Operation) {
+        self.operations.push(operation);
+        *self.proceed.lock().unwrap() = false;
+        loop {
+            {
+                if *self.proceed.lock().unwrap() {
+                    break;
+                }
+            }
+            thread::yield_now();
         }
     }
 }
@@ -126,7 +171,7 @@ fn run_app<B: Backend>(
 }
 
 fn ui(frame: &mut Frame, app: &mut App) {
-    match app.selected_item {
+    match &app.algorithm {
         None => {
             let list_items: Vec<widgets::ListItem> = app
                 .list
@@ -149,8 +194,8 @@ fn ui(frame: &mut Frame, app: &mut App) {
 
             frame.render_stateful_widget(list, frame.size(), &mut app.list.state);
         }
-        Some(s) => {
-            let p = Paragraph::new(s);
+        Some(a) => {
+            let p = Paragraph::new(a.name.clone());
             frame.render_widget(p, frame.size());
             return;
         }
@@ -159,7 +204,7 @@ fn ui(frame: &mut Frame, app: &mut App) {
 
 fn handle_key_events(key: KeyEvent, app: &mut App) -> io::Result<bool> {
     if key.kind == KeyEventKind::Press {
-        match app.selected_item {
+        match app.algorithm {
             None => match key.code {
                 KeyCode::Char('q') => return Ok(true),
                 KeyCode::Left | KeyCode::Char('h') => app.list.unselect(),
@@ -167,13 +212,15 @@ fn handle_key_events(key: KeyEvent, app: &mut App) -> io::Result<bool> {
                 KeyCode::Up | KeyCode::Char('k') => app.list.previous(),
                 KeyCode::Enter => {
                     if let Some(i) = app.list.state.selected() {
-                        app.selected_item = Some(app.list.items[i]);
+                        let name = app.list.items[i];
+                        let algorithm = AlgorithmStatus::new(String::from(name), 10);
+                        app.algorithm = Some(algorithm);
                     }
                 }
                 _ => {}
             },
-            Some(s) => match key.code {
-                KeyCode::Esc => app.selected_item = None,
+            Some(_) => match key.code {
+                KeyCode::Esc => app.algorithm = None,
                 _ => {}
             },
         }
