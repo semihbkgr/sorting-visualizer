@@ -1,9 +1,12 @@
-pub trait Algorithm {
-    fn next(&mut self, operation: Operation);
+pub mod bubble_sort;
+
+pub trait AlgorithmContext {
+    fn next(&self, operation: Operation, nums: Vec<i32>);
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum Operation {
-    Compare(usize, usize),
-    Swap(usize, usize),
+    Noop(),
+    Compare(i32, i32),
+    Swap(i32, i32),
 }

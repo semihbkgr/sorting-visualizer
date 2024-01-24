@@ -10,15 +10,12 @@ use ratatui::{
 };
 use sorting_visualizer::{
     init_vec, shuffle,
-    sorting::{Algorithm, Operation},
+    sorting::{bubble_sort, AlgorithmContext, Operation},
 };
 use std::{
-    collections::HashMap,
     fmt::Display,
-    hash::Hash,
     io::{self, stdout},
-    ops::Index,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -89,10 +86,12 @@ impl<'a> App<'a> {
 }
 
 const BLOCK_FULL: char = '\u{2588}';
+const BLOCK_HALF_QUARTER: char = '\u{2586}';
 const BLOCK_HALF: char = '\u{2584}';
+const BLOCK_QUARTER: char = '\u{2582}';
 
 struct AlgorithmUI {
-    status: AlgorithmStatus,
+    status: Arc<AlgorithmStatus>,
     blocks: Vec<String>,
     size: Rect,
 }
@@ -100,7 +99,7 @@ struct AlgorithmUI {
 impl AlgorithmUI {
     fn new(name: String, size: Rect) -> AlgorithmUI {
         AlgorithmUI {
-            status: AlgorithmStatus::new(name, item_size(size)),
+            status: Arc::new(AlgorithmStatus::new(name, item_size(size))),
             blocks: block_strings(item_size(size)),
             size,
         }
@@ -109,7 +108,16 @@ impl AlgorithmUI {
     // todo: optimize
     fn display_string(&self) -> String {
         let mut lines = Vec::new();
-        for i in self.status.nums.iter() {
+        let nums = self
+            .status
+            .operations
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .1
+            .clone();
+        for i in nums.iter() {
             lines.push(self.blocks[(*i as usize) - 1].clone());
         }
 
@@ -147,11 +155,14 @@ fn block_strings(n: usize) -> Vec<String> {
     let mut v = Vec::new();
     for i in 1..n + 1 {
         let mut s = String::new();
-        for _ in 0..i / 2 {
+        for _ in 0..i / 4 {
             s.push(BLOCK_FULL);
         }
-        for _ in 0..i % 2 {
-            s.push(BLOCK_HALF);
+        match i % 4 {
+            1 => s.push(BLOCK_QUARTER),
+            2 => s.push(BLOCK_HALF),
+            3 => s.push(BLOCK_HALF_QUARTER),
+            _ => {}
         }
         v.push(s);
     }
@@ -164,7 +175,7 @@ fn item_size(s: Rect) -> usize {
 
 struct AlgorithmStatus {
     nums: Vec<i32>,
-    operations: Vec<Operation>,
+    operations: Mutex<Vec<(Operation, Vec<i32>)>>,
     name: String,
     proceed: Mutex<bool>,
 }
@@ -173,23 +184,28 @@ impl AlgorithmStatus {
     fn new(name: String, size: usize) -> AlgorithmStatus {
         let mut v = init_vec(size);
         shuffle(&mut v);
+        let operations = Vec::from(vec![(Operation::Noop(), v.clone())]);
         return AlgorithmStatus {
             nums: v,
-            operations: Vec::new(),
+            operations: Mutex::new(operations),
             name,
             proceed: Mutex::new(false),
         };
     }
 
-    fn proceed(&mut self) {
+    fn proceed(&self) {
         *self.proceed.lock().unwrap() = true;
     }
 }
 
-impl Algorithm for AlgorithmStatus {
-    fn next(&mut self, operation: Operation) {
-        self.operations.push(operation);
-        *self.proceed.lock().unwrap() = false;
+impl AlgorithmContext for AlgorithmStatus {
+    fn next(&self, operation: Operation, nums: Vec<i32>) {
+        {
+            let mut proceed = self.proceed.lock().unwrap();
+            *proceed = false;
+            self.operations.lock().unwrap().push((operation, nums));
+        }
+
         loop {
             {
                 if *self.proceed.lock().unwrap() {
@@ -208,9 +224,17 @@ fn main() -> io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let app = App::new(vec![
-        "item1", "item2", "item3", "item4", "item5", "item6", "item7", "item8", "item9",
+        "item1",
+        "item2",
+        "bubble sort",
+        "item4",
+        "item5",
+        "item6",
+        "item7",
+        "item8",
+        "item9",
     ]);
-    let tick_rate = Duration::from_millis(250);
+    let tick_rate = Duration::from_millis(50);
     let res = run_app(&mut terminal, app, tick_rate);
 
     disable_raw_mode()?;
@@ -271,8 +295,23 @@ fn ui(frame: &mut Frame, app: &mut App) {
             frame.render_stateful_widget(list, frame.size(), &mut app.list.state);
         }
         Some(algorithm_ui) => {
-            let p = Paragraph::new(algorithm_ui.display_string());
+            let len = algorithm_ui
+                .status
+                .as_ref()
+                .operations
+                .lock()
+                .unwrap()
+                .len();
+            let text = format!(
+                "{}{} - {}",
+                algorithm_ui.display_string(),
+                algorithm_ui.status.name,
+                len
+            );
+            let p = Paragraph::new(text);
             frame.render_widget(p, frame.size());
+            algorithm_ui.status.as_ref().proceed();
+
             return;
         }
     }
@@ -288,8 +327,16 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> io::Result<boo
                 KeyCode::Up | KeyCode::Char('k') => app.list.previous(),
                 KeyCode::Enter => {
                     if let Some(i) = app.list.state.selected() {
-                        let name = app.list.items[i];
-                        let algorithm = AlgorithmUI::new(String::from(name), size);
+                        let name = app.list.items[i].to_string();
+                        let algorithm = AlgorithmUI::new(name.clone(), size);
+                        let status = algorithm.status.clone();
+                        let algorithm_func = get_algorithm_func(name.clone());
+                        thread::spawn(move || {
+                            algorithm_func(
+                                status.as_ref().nums.clone().as_mut_slice(),
+                                status.as_ref(),
+                            );
+                        });
                         app.algorithm = Some(algorithm);
                     }
                 }
@@ -302,4 +349,11 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> io::Result<boo
         }
     }
     Ok(false)
+}
+
+fn get_algorithm_func<'a>(s: String) -> impl FnOnce(&mut [i32], &dyn AlgorithmContext) {
+    match s.as_str() {
+        "bubble sort" => bubble_sort::sort,
+        _ => panic!("algorithm not found"),
+    }
 }
