@@ -7,6 +7,6 @@ pub trait AlgorithmContext {
 #[derive(Debug, Clone, Copy)]
 pub enum Operation {
     Noop(),
-    Compare(i32, i32),
-    Swap(i32, i32),
+    Compare(usize, usize),
+    Swap(usize, usize),
 }

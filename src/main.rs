@@ -15,9 +15,11 @@ use sorting_visualizer::{
 use std::{
     fmt::Display,
     io::{self, stdout},
+    ops::{Index, IndexMut},
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
+    vec,
 };
 
 struct List<T: Display> {
@@ -106,17 +108,11 @@ impl AlgorithmUI {
     }
 
     // todo: optimize
-    fn display_string(&self) -> String {
+    fn display_text(&self) -> Text {
         let mut lines = Vec::new();
-        let nums = self
-            .status
-            .operations
-            .lock()
-            .unwrap()
-            .last()
-            .unwrap()
-            .1
-            .clone();
+        let guard = self.status.operations.lock().unwrap();
+        let (operation, nums) = guard.last().unwrap();
+
         for i in nums.iter() {
             lines.push(self.blocks[(*i as usize) - 1].clone());
         }
@@ -125,24 +121,37 @@ impl AlgorithmUI {
         let mut result = String::new();
         for i in 0..max_height {
             for j in lines.iter() {
-                result.push((*j).chars().nth(max_height - i - 1).unwrap_or(' '));
+                let c = (*j).chars().nth(max_height - i - 1).unwrap_or(' ');
+                result.push(c);
             }
             result.push('\n');
         }
-        return result;
+        let mut text = Text::raw(result);
+        match operation {
+            Operation::Compare(a, b) => {
+                for line in text.lines.iter_mut() {
+                    let line_content = line.spans[0].content.clone();
+                    let line_chars = line_content.chars().into_iter().collect::<Vec<char>>();
+                    let pre = Span::raw(line_chars[..*a].iter().collect::<String>());
+                    let a_span = Span::raw(line_chars[*a..*a + 1].iter().collect::<String>())
+                        .fg(Color::Green);
+                    let mid = Span::raw(line_chars[*a + 1..*b].iter().collect::<String>());
+                    let b_span = Span::raw(line_chars[*b..*b + 1].iter().collect::<String>())
+                        .fg(Color::Green);
+                    let last = Span::raw(line_chars[*b + 1..].iter().collect::<String>());
+
+                    line.spans = vec![pre, a_span, mid, b_span, last];
+                }
+            }
+            _ => {}
+        }
+        return text;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_display_string() {
-        let size_rect = Rect::new(0, 0, 20, 10);
-        let algorithm_ui = AlgorithmUI::new("hello".to_string(), size_rect);
-        println!("{}", algorithm_ui.display_string());
-    }
 
     #[test]
     fn test_block_strings() {
@@ -169,6 +178,7 @@ fn block_strings(n: usize) -> Vec<String> {
     return v;
 }
 
+// todo
 fn item_size(s: Rect) -> usize {
     return s.width as usize;
 }
@@ -295,19 +305,18 @@ fn ui(frame: &mut Frame, app: &mut App) {
             frame.render_stateful_widget(list, frame.size(), &mut app.list.state);
         }
         Some(algorithm_ui) => {
-            let len = algorithm_ui
-                .status
-                .as_ref()
-                .operations
-                .lock()
-                .unwrap()
-                .len();
-            let text = format!(
-                "{}{} - {}",
-                algorithm_ui.display_string(),
-                algorithm_ui.status.name,
-                len
-            );
+            let len;
+            let operation;
+            {
+                let steps = algorithm_ui.status.operations.lock().unwrap();
+                len = steps.len();
+                operation = steps.last().unwrap().0;
+            }
+
+            let text = algorithm_ui.display_text();
+            frame.render_widget(Paragraph::new(text), frame.size());
+
+            let text = format!("{} - {} {:?}", algorithm_ui.status.name, len, operation,);
             let p = Paragraph::new(text);
             frame.render_widget(p, frame.size());
             algorithm_ui.status.as_ref().proceed();
