@@ -150,17 +150,6 @@ impl AlgorithmUI {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_block_strings() {
-        let blocks = block_strings(10);
-        println!("{:?}", blocks);
-    }
-}
-
 fn block_strings(n: usize) -> Vec<String> {
     let mut v = Vec::new();
     for i in 1..n + 1 {
@@ -252,6 +241,13 @@ fn main() -> io::Result<()> {
         "item7",
         "item8",
         "item9",
+        "item10",
+        "item11",
+        "item12",
+        "item13",
+        "item14",
+        "item15",
+        "item16",
     ]);
     let tick_rate = Duration::from_millis(50);
     let res = run_app(&mut terminal, app, tick_rate);
@@ -298,20 +294,23 @@ fn ui(frame: &mut Frame, app: &mut App) {
                 .iter()
                 .map(|i| {
                     let lines = vec![Line::from(i.bold()).alignment(Alignment::Center)];
-                    ListItem::new(lines).style(Style::default().fg(Color::Black).bg(Color::White))
+                    ListItem::new(lines).style(Style::default().fg(Color::White))
                 })
                 .collect();
 
+            let width = WIDTH + 2;
+            let height = HEIGHT * 2 + 2;
+            let area = center_area(width, height, frame.size());
+
             let list = widgets::List::new(list_items)
-                .block(Block::default().borders(Borders::ALL).title("List"))
+                .block(Block::default().borders(Borders::ALL).border_type(Rounded))
                 .highlight_style(
                     Style::default()
-                        .bg(Color::LightGreen)
+                        .bg(Color::DarkGray)
                         .add_modifier(Modifier::BOLD),
-                )
-                .highlight_symbol(">> ");
+                );
 
-            frame.render_stateful_widget(list, frame.size(), &mut app.list.state);
+            frame.render_stateful_widget(list, area, &mut app.list.state);
         }
         Some(algorithm_ui) => {
             /*
@@ -326,15 +325,17 @@ fn ui(frame: &mut Frame, app: &mut App) {
 
             let blocks_width = algorithm_ui.size.0 + 2;
             let blocks_height = algorithm_ui.size.1 + 2;
-            let x_position = (frame.size().width - blocks_width) / 2;
-            let y_position = (frame.size().height - blocks_height) / 2;
-            let rect = Rect::new(x_position, y_position, blocks_width, blocks_height);
+            let area = center_area(blocks_width, blocks_height, frame.size());
 
             let text = algorithm_ui.display_text();
-            let paragraph = Paragraph::new(text)
-                .alignment(Alignment::Center)
-                .block(Block::default().border_type(Rounded).borders(Borders::ALL));
-            frame.render_widget(paragraph, rect);
+            let paragraph = Paragraph::new(text).alignment(Alignment::Center).block(
+                Block::default()
+                    .border_type(Rounded)
+                    .borders(Borders::ALL)
+                    .title(algorithm_ui.status.name.clone())
+                    .title_alignment(Alignment::Left),
+            );
+            frame.render_widget(paragraph, area);
             algorithm_ui.status.as_ref().proceed();
             return;
         }
@@ -380,4 +381,10 @@ fn get_algorithm_func<'a>(s: String) -> impl FnOnce(&mut [i32], &dyn AlgorithmCo
         "bubble sort" => bubble_sort::sort,
         _ => panic!("algorithm not found"),
     }
+}
+
+fn center_area(width: u16, height: u16, s: Rect) -> Rect {
+    let x_position = (s.width - width) / 2;
+    let y_position = (s.height - height) / 2;
+    Rect::new(x_position, y_position, width, height)
 }
