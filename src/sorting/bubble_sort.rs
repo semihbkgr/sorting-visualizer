@@ -16,3 +16,19 @@ pub fn sort(nums: &mut [i32], ctx: &dyn AlgorithmContext) {
     }
     ctx.next(Noop(), nums.to_vec());
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::sorting::is_sorted;
+    use crate::sorting::NoopContext;
+
+    use super::*;
+
+    #[test]
+    fn test_sort() {
+        //descending
+        let nums = &mut [3, 5, 2, 8, 6, 9, 0, 1, 8, 7];
+        sort(nums, &NoopContext);
+        assert!(is_sorted(nums));
+    }
+}

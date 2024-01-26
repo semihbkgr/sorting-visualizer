@@ -232,22 +232,12 @@ fn main() -> io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let app = App::new(vec![
+        "bubble sort",
         "item1",
         "item2",
-        "bubble sort",
+        "item3",
         "item4",
         "item5",
-        "item6",
-        "item7",
-        "item8",
-        "item9",
-        "item10",
-        "item11",
-        "item12",
-        "item13",
-        "item14",
-        "item15",
-        "item16",
     ]);
     let tick_rate = Duration::from_millis(50);
     let res = run_app(&mut terminal, app, tick_rate);
@@ -387,4 +377,81 @@ fn center_area(width: u16, height: u16, s: Rect) -> Rect {
     let x_position = (s.width - width) / 2;
     let y_position = (s.height - height) / 2;
     Rect::new(x_position, y_position, width, height)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Borrow;
+
+    use super::*;
+
+    #[test]
+    fn test_block_strings() {
+        let blocks = block_strings(10);
+        assert!(blocks.contains(BLOCK_QUARTER.to_string().borrow()));
+        assert!(blocks.contains(BLOCK_HALF.to_string().borrow()));
+        assert!(blocks.contains(BLOCK_HALF_QUARTER.to_string().borrow()));
+        assert!(blocks.contains(BLOCK_FULL.to_string().borrow()));
+        assert!(blocks.contains(
+            format!("{}{}", BLOCK_FULL, BLOCK_QUARTER)
+                .to_string()
+                .borrow()
+        ));
+        assert!(blocks.contains(format!("{}{}", BLOCK_FULL, BLOCK_HALF).to_string().borrow()));
+        assert!(blocks.contains(
+            format!("{}{}", BLOCK_FULL, BLOCK_HALF_QUARTER)
+                .to_string()
+                .borrow()
+        ));
+        assert!(blocks.contains(format!("{}{}", BLOCK_FULL, BLOCK_FULL).to_string().borrow()));
+        assert!(blocks.contains(
+            format!("{}{}{}", BLOCK_FULL, BLOCK_FULL, BLOCK_QUARTER)
+                .to_string()
+                .borrow()
+        ));
+        assert!(blocks.contains(
+            format!("{}{}{}", BLOCK_FULL, BLOCK_FULL, BLOCK_HALF)
+                .to_string()
+                .borrow()
+        ));
+    }
+
+    #[test]
+    fn test_blocks_size() {
+        let (w, h) = blocks_size(Rect::new(0, 0, 64, 64)).unwrap();
+        assert!(w == 32);
+        assert!(h == 8);
+    }
+
+    #[test]
+    #[should_panic(expected = "width is too small")]
+    fn test_blocks_size_width_too_small() {
+        blocks_size(Rect::new(0, 0, 8, 64)).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "height is too small")]
+    fn test_blocks_size_height_too_small() {
+        blocks_size(Rect::new(0, 0, 64, 4)).unwrap();
+    }
+
+    #[test]
+    fn test_center_area() {
+        let area = center_area(32, 8, Rect::new(0, 0, 128, 32));
+        assert_eq!(area.x, 48);
+        assert_eq!(area.y, 12);
+        assert_eq!(area.width, 32);
+        assert_eq!(area.height, 8);
+    }
+
+    #[test]
+    fn test_get_algorithm_func() {
+        _ = get_algorithm_func(String::from("bubble sort"));
+    }
+
+    #[test]
+    #[should_panic(expected = "algorithm not found")]
+    fn test_get_algorithm_func_not_found() {
+        _ = get_algorithm_func(String::from("algorithm"));
+    }
 }

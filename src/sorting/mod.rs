@@ -10,3 +10,14 @@ pub enum Operation {
     Compare(usize, usize),
     Swap(usize, usize),
 }
+
+struct NoopContext;
+
+impl AlgorithmContext for NoopContext {
+    fn next(&self, _: Operation, _: Vec<i32>) {}
+}
+
+#[cfg(test)]
+fn is_sorted(nums: &[i32]) -> bool {
+    nums.windows(2).all(|w| w[0] <= w[1])
+}
