@@ -1,6 +1,6 @@
 use super::{
     AlgorithmContext,
-    Operation::{Compare, Swap},
+    Operation::{Compare, Noop, Swap},
 };
 
 pub fn sort(nums: &mut [i32], ctx: &dyn AlgorithmContext) {
@@ -14,4 +14,5 @@ pub fn sort(nums: &mut [i32], ctx: &dyn AlgorithmContext) {
             }
         }
     }
+    ctx.next(Noop(), nums.to_vec());
 }

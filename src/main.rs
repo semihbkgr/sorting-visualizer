@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     execute,
@@ -6,7 +7,7 @@ use crossterm::{
 };
 use ratatui::{
     prelude::*,
-    widgets::{self, Block, Borders, ListItem, ListState, Paragraph},
+    widgets::{self, Block, BorderType::Rounded, Borders, ListItem, ListState, Paragraph},
 };
 use sorting_visualizer::{
     init_vec, shuffle,
@@ -15,7 +16,6 @@ use sorting_visualizer::{
 use std::{
     fmt::Display,
     io::{self, stdout},
-    ops::{Index, IndexMut},
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
@@ -95,16 +95,17 @@ const BLOCK_QUARTER: char = '\u{2582}';
 struct AlgorithmUI {
     status: Arc<AlgorithmStatus>,
     blocks: Vec<String>,
-    size: Rect,
+    size: (u16, u16),
 }
 
 impl AlgorithmUI {
-    fn new(name: String, size: Rect) -> AlgorithmUI {
-        AlgorithmUI {
-            status: Arc::new(AlgorithmStatus::new(name, item_size(size))),
-            blocks: block_strings(item_size(size)),
-            size,
-        }
+    fn new(name: String, size: Rect) -> Result<AlgorithmUI> {
+        let blocks_size = blocks_size(size)?;
+        Ok(AlgorithmUI {
+            status: Arc::new(AlgorithmStatus::new(name, blocks_size.0 as usize)),
+            blocks: block_strings(blocks_size.0 as usize),
+            size: blocks_size,
+        })
     }
 
     // todo: optimize
@@ -178,9 +179,17 @@ fn block_strings(n: usize) -> Vec<String> {
     return v;
 }
 
-// todo
-fn item_size(s: Rect) -> usize {
-    return s.width as usize;
+const WIDTH: u16 = 32;
+const HEIGHT: u16 = WIDTH / 4;
+
+fn blocks_size(s: Rect) -> anyhow::Result<(u16, u16)> {
+    if s.width < WIDTH {
+        return Err(anyhow!("width is too small".to_string()));
+    }
+    if s.height < HEIGHT {
+        return Err(anyhow!("height is too small".to_string()));
+    }
+    return Ok((WIDTH, HEIGHT));
 }
 
 struct AlgorithmStatus {
@@ -305,6 +314,7 @@ fn ui(frame: &mut Frame, app: &mut App) {
             frame.render_stateful_widget(list, frame.size(), &mut app.list.state);
         }
         Some(algorithm_ui) => {
+            /*
             let len;
             let operation;
             {
@@ -312,15 +322,20 @@ fn ui(frame: &mut Frame, app: &mut App) {
                 len = steps.len();
                 operation = steps.last().unwrap().0;
             }
+            */
+
+            let blocks_width = algorithm_ui.size.0 + 2;
+            let blocks_height = algorithm_ui.size.1 + 2;
+            let x_position = (frame.size().width - blocks_width) / 2;
+            let y_position = (frame.size().height - blocks_height) / 2;
+            let rect = Rect::new(x_position, y_position, blocks_width, blocks_height);
 
             let text = algorithm_ui.display_text();
-            frame.render_widget(Paragraph::new(text), frame.size());
-
-            let text = format!("{} - {} {:?}", algorithm_ui.status.name, len, operation,);
-            let p = Paragraph::new(text);
-            frame.render_widget(p, frame.size());
+            let paragraph = Paragraph::new(text)
+                .alignment(Alignment::Center)
+                .block(Block::default().border_type(Rounded).borders(Borders::ALL));
+            frame.render_widget(paragraph, rect);
             algorithm_ui.status.as_ref().proceed();
-
             return;
         }
     }
@@ -337,7 +352,7 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> io::Result<boo
                 KeyCode::Enter => {
                     if let Some(i) = app.list.state.selected() {
                         let name = app.list.items[i].to_string();
-                        let algorithm = AlgorithmUI::new(name.clone(), size);
+                        let algorithm = AlgorithmUI::new(name.clone(), size).unwrap();
                         let status = algorithm.status.clone();
                         let algorithm_func = get_algorithm_func(name.clone());
                         thread::spawn(move || {
