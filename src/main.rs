@@ -16,6 +16,7 @@ use sorting_visualizer::{
 use std::{
     fmt::Display,
     io::{self, stdout},
+    ops::{DerefMut, Index},
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
@@ -111,8 +112,9 @@ impl AlgorithmUI {
     // todo: optimize
     fn display_text(&self) -> Text {
         let mut lines = Vec::new();
-        let guard = self.status.operations.lock().unwrap();
-        let (operation, nums) = guard.last().unwrap();
+        let index = self.status.index.lock().unwrap();
+        let operations = self.status.operations.lock().unwrap();
+        let (operation, nums) = operations.index(*index);
 
         for i in nums.iter() {
             lines.push(self.blocks[(*i as usize) - 1].clone());
@@ -185,7 +187,7 @@ struct AlgorithmStatus {
     nums: Vec<i32>,
     operations: Mutex<Vec<(Operation, Vec<i32>)>>,
     name: String,
-    proceed: Mutex<bool>,
+    index: Mutex<usize>,
 }
 
 impl AlgorithmStatus {
@@ -197,31 +199,29 @@ impl AlgorithmStatus {
             nums: v,
             operations: Mutex::new(operations),
             name,
-            proceed: Mutex::new(false),
+            index: Mutex::new(0),
         };
     }
 
-    fn proceed(&self) {
-        *self.proceed.lock().unwrap() = true;
+    fn step_next(&self) {
+        let operations_len = self.operations.lock().unwrap().len();
+        let mut index = self.index.lock().unwrap();
+        if *index < operations_len - 1 {
+            *index.deref_mut() = *index + 1;
+        }
+    }
+
+    fn step_prev(&self) {
+        let mut index = self.index.lock().unwrap();
+        if *index > 0 {
+            *index.deref_mut() = *index - 1;
+        }
     }
 }
 
 impl AlgorithmContext for AlgorithmStatus {
     fn next(&self, operation: Operation, nums: Vec<i32>) {
-        {
-            let mut proceed = self.proceed.lock().unwrap();
-            *proceed = false;
-            self.operations.lock().unwrap().push((operation, nums));
-        }
-
-        loop {
-            {
-                if *self.proceed.lock().unwrap() {
-                    break;
-                }
-            }
-            thread::yield_now();
-        }
+        self.operations.lock().unwrap().push((operation, nums));
     }
 }
 
@@ -326,7 +326,6 @@ fn ui(frame: &mut Frame, app: &mut App) {
                     .title_alignment(Alignment::Left),
             );
             frame.render_widget(paragraph, area);
-            algorithm_ui.status.as_ref().proceed();
             return;
         }
     }
@@ -334,7 +333,7 @@ fn ui(frame: &mut Frame, app: &mut App) {
 
 fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> io::Result<bool> {
     if key.kind == KeyEventKind::Press {
-        match app.algorithm {
+        match &app.algorithm {
             None => match key.code {
                 KeyCode::Char('q') => return Ok(true),
                 KeyCode::Left | KeyCode::Char('h') => app.list.unselect(),
@@ -357,8 +356,10 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> io::Result<boo
                 }
                 _ => {}
             },
-            Some(_) => match key.code {
+            Some(algorithm_ui) => match key.code {
                 KeyCode::Esc => app.algorithm = None,
+                KeyCode::Right => algorithm_ui.status.as_ref().step_next(),
+                KeyCode::Left => algorithm_ui.status.as_ref().step_prev(),
                 _ => {}
             },
         }
