@@ -137,6 +137,21 @@ impl AlgorithmUI {
                     let line_chars = line_content.chars().into_iter().collect::<Vec<char>>();
                     let pre = Span::raw(line_chars[..*a].iter().collect::<String>());
                     let a_span = Span::raw(line_chars[*a..*a + 1].iter().collect::<String>())
+                        .fg(Color::LightBlue);
+                    let mid = Span::raw(line_chars[*a + 1..*b].iter().collect::<String>());
+                    let b_span = Span::raw(line_chars[*b..*b + 1].iter().collect::<String>())
+                        .fg(Color::LightBlue);
+                    let last = Span::raw(line_chars[*b + 1..].iter().collect::<String>());
+
+                    line.spans = vec![pre, a_span, mid, b_span, last];
+                }
+            }
+            Operation::Swap(a, b) => {
+                for line in text.lines.iter_mut() {
+                    let line_content = line.spans[0].content.clone();
+                    let line_chars = line_content.chars().into_iter().collect::<Vec<char>>();
+                    let pre = Span::raw(line_chars[..*a].iter().collect::<String>());
+                    let a_span = Span::raw(line_chars[*a..*a + 1].iter().collect::<String>())
                         .fg(Color::Green);
                     let mid = Span::raw(line_chars[*a + 1..*b].iter().collect::<String>());
                     let b_span = Span::raw(line_chars[*b..*b + 1].iter().collect::<String>())
@@ -216,6 +231,12 @@ impl AlgorithmStatus {
         if *index > 0 {
             *index.deref_mut() = *index - 1;
         }
+    }
+
+    fn step_info(&self) -> (usize, Operation) {
+        let index = self.index.lock().unwrap();
+        let (operation, _) = self.operations.lock().unwrap().index(*index).clone();
+        return (*index, operation);
     }
 }
 
@@ -303,16 +324,6 @@ fn ui(frame: &mut Frame, app: &mut App) {
             frame.render_stateful_widget(list, area, &mut app.list.state);
         }
         Some(algorithm_ui) => {
-            /*
-            let len;
-            let operation;
-            {
-                let steps = algorithm_ui.status.operations.lock().unwrap();
-                len = steps.len();
-                operation = steps.last().unwrap().0;
-            }
-            */
-
             let blocks_width = algorithm_ui.size.0 + 2;
             let blocks_height = algorithm_ui.size.1 + 2;
             let area = center_area(blocks_width, blocks_height, frame.size());
@@ -326,6 +337,14 @@ fn ui(frame: &mut Frame, app: &mut App) {
                     .title_alignment(Alignment::Left),
             );
             frame.render_widget(paragraph, area);
+
+            let (step, operation) = algorithm_ui.status.step_info();
+            let info = format!("step: {}\n{}", step, operation);
+            let text_info = Text::from(info);
+            let paragraph_info = Paragraph::new(text_info).alignment(Alignment::Left);
+            let next_area = next_area_vertical(area, 2, 1);
+            frame.render_widget(paragraph_info, next_area);
+
             return;
         }
     }
@@ -378,6 +397,15 @@ fn center_area(width: u16, height: u16, s: Rect) -> Rect {
     let x_position = (s.width - width) / 2;
     let y_position = (s.height - height) / 2;
     Rect::new(x_position, y_position, width, height)
+}
+
+fn next_area_vertical(s: Rect, height: u16, width_padding: u16) -> Rect {
+    Rect::new(
+        s.x + width_padding,
+        s.y + s.height,
+        s.width - width_padding * 2,
+        height,
+    )
 }
 
 #[cfg(test)]

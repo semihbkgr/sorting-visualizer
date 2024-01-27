@@ -1,3 +1,7 @@
+use std::fmt::Display;
+
+use anyhow::Ok;
+
 pub mod bubble_sort;
 
 pub trait AlgorithmContext {
@@ -9,6 +13,20 @@ pub enum Operation {
     Noop(),
     Compare(usize, usize),
     Swap(usize, usize),
+}
+
+impl Display for Operation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Noop() => std::fmt::Result::Ok(()),
+            Self::Compare(a, b) => {
+                write!(f, "compare: {} {}", a, b)
+            }
+            Self::Swap(a, b) => {
+                write!(f, "swap: {} {}", a, b)
+            }
+        }
+    }
 }
 
 struct NoopContext;
