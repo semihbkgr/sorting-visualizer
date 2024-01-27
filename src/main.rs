@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -19,7 +19,7 @@ use std::{
     ops::{DerefMut, Index},
     sync::{Arc, Mutex},
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     vec,
 };
 
@@ -97,15 +97,21 @@ struct AlgorithmUI {
     status: Arc<AlgorithmStatus>,
     blocks: Vec<String>,
     size: (u16, u16),
+    auto_next: bool,
+    tick_rate: Duration,
+    last_tick: Duration,
 }
 
 impl AlgorithmUI {
-    fn new(name: String, size: Rect) -> Result<AlgorithmUI> {
+    fn new(name: String, size: Rect, tick_rate: Duration) -> Result<AlgorithmUI> {
         let blocks_size = blocks_size(size)?;
         Ok(AlgorithmUI {
             status: Arc::new(AlgorithmStatus::new(name, blocks_size.0 as usize)),
             blocks: block_strings(blocks_size.0 as usize),
             size: blocks_size,
+            auto_next: true,
+            tick_rate,
+            last_tick: Duration::ZERO,
         })
     }
 
@@ -164,6 +170,16 @@ impl AlgorithmUI {
             _ => {}
         }
         return text;
+    }
+
+    fn tick(&mut self) {
+        if self.auto_next {
+            let current_duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+            if self.last_tick + self.tick_rate < current_duration {
+                self.last_tick = current_duration;
+                self.status.as_ref().step_next();
+            }
+        }
     }
 }
 
@@ -285,8 +301,12 @@ fn run_app<B: Backend>(
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
         if crossterm::event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                if handle_key_events(key, &mut app, terminal.size()?)? {
-                    return Ok(());
+                let action = handle_key_events(key, &mut app, terminal.size()?);
+                match action {
+                    Action::Quit => {
+                        return io::Result::Ok(());
+                    }
+                    _ => {}
                 }
             }
         }
@@ -323,45 +343,58 @@ fn ui(frame: &mut Frame, app: &mut App) {
 
             frame.render_stateful_widget(list, area, &mut app.list.state);
         }
-        Some(algorithm_ui) => {
-            let blocks_width = algorithm_ui.size.0 + 2;
-            let blocks_height = algorithm_ui.size.1 + 2;
+        Some(algorithm) => {
+            algorithm.tick();
+
+            let blocks_width = algorithm.size.0 + 2;
+            let blocks_height = algorithm.size.1 + 2;
             let area = center_area(blocks_width, blocks_height, frame.size());
 
-            let text = algorithm_ui.display_text();
+            let text = algorithm.display_text();
             let paragraph = Paragraph::new(text).alignment(Alignment::Center).block(
                 Block::default()
                     .border_type(Rounded)
                     .borders(Borders::ALL)
-                    .title(algorithm_ui.status.name.clone())
+                    .title(algorithm.status.name.clone())
                     .title_alignment(Alignment::Left),
             );
             frame.render_widget(paragraph, area);
 
-            let (step, operation) = algorithm_ui.status.step_info();
-            let info = format!("step: {}\n{}", step, operation);
-            let text_info = Text::from(info);
-            let paragraph_info = Paragraph::new(text_info).alignment(Alignment::Left);
-            let next_area = next_area_vertical(area, 2, 1);
-            frame.render_widget(paragraph_info, next_area);
+            if !algorithm.auto_next {
+                let (step, operation) = algorithm.status.step_info();
+                let info = format!("step: {}\n{}", step, operation);
+                let text_info = Text::from(info);
+                let paragraph_info = Paragraph::new(text_info).alignment(Alignment::Left);
+                let next_area = next_area_vertical(area, 2, 1);
+                frame.render_widget(paragraph_info, next_area);
 
-            return;
+                return;
+            }
         }
     }
 }
 
-fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> io::Result<bool> {
+enum Action {
+    Tick,
+    Quit,
+}
+
+fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> Action {
     if key.kind == KeyEventKind::Press {
-        match &app.algorithm {
+        match &mut app.algorithm {
             None => match key.code {
-                KeyCode::Char('q') => return Ok(true),
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    return Action::Quit
+                }
                 KeyCode::Left | KeyCode::Char('h') => app.list.unselect(),
                 KeyCode::Down | KeyCode::Char('j') => app.list.next(),
                 KeyCode::Up | KeyCode::Char('k') => app.list.previous(),
                 KeyCode::Enter => {
                     if let Some(i) = app.list.state.selected() {
                         let name = app.list.items[i].to_string();
-                        let algorithm = AlgorithmUI::new(name.clone(), size).unwrap();
+                        let algorithm =
+                            AlgorithmUI::new(name.clone(), size, Duration::from_millis(200))
+                                .unwrap();
                         let status = algorithm.status.clone();
                         let algorithm_func = get_algorithm_func(name.clone());
                         thread::spawn(move || {
@@ -378,12 +411,17 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> io::Result<boo
             Some(algorithm_ui) => match key.code {
                 KeyCode::Esc => app.algorithm = None,
                 KeyCode::Right => algorithm_ui.status.as_ref().step_next(),
-                KeyCode::Left => algorithm_ui.status.as_ref().step_prev(),
+                KeyCode::Left => {
+                    if !algorithm_ui.auto_next {
+                        algorithm_ui.status.as_ref().step_prev()
+                    }
+                }
+                KeyCode::Char(' ') => algorithm_ui.auto_next = !algorithm_ui.auto_next,
                 _ => {}
             },
         }
     }
-    Ok(false)
+    return Action::Tick;
 }
 
 fn get_algorithm_func<'a>(s: String) -> impl FnOnce(&mut [i32], &dyn AlgorithmContext) {
