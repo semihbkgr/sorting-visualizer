@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -301,8 +301,12 @@ fn run_app<B: Backend>(
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
         if crossterm::event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                if handle_key_events(key, &mut app, terminal.size()?)? {
-                    return Ok(());
+                let action = handle_key_events(key, &mut app, terminal.size()?);
+                match action {
+                    Action::Quit => {
+                        return io::Result::Ok(());
+                    }
+                    _ => {}
                 }
             }
         }
@@ -356,25 +360,32 @@ fn ui(frame: &mut Frame, app: &mut App) {
             );
             frame.render_widget(paragraph, area);
 
-            if !algorithm.auto_next{
+            if !algorithm.auto_next {
                 let (step, operation) = algorithm.status.step_info();
                 let info = format!("step: {}\n{}", step, operation);
                 let text_info = Text::from(info);
                 let paragraph_info = Paragraph::new(text_info).alignment(Alignment::Left);
                 let next_area = next_area_vertical(area, 2, 1);
                 frame.render_widget(paragraph_info, next_area);
-    
+
                 return;
             }
         }
     }
 }
 
-fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> io::Result<bool> {
+enum Action {
+    Tick,
+    Quit,
+}
+
+fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> Action {
     if key.kind == KeyEventKind::Press {
         match &mut app.algorithm {
             None => match key.code {
-                KeyCode::Char('q') => return Ok(true),
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    return Action::Quit
+                }
                 KeyCode::Left | KeyCode::Char('h') => app.list.unselect(),
                 KeyCode::Down | KeyCode::Char('j') => app.list.next(),
                 KeyCode::Up | KeyCode::Char('k') => app.list.previous(),
@@ -400,13 +411,17 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> io::Result<boo
             Some(algorithm_ui) => match key.code {
                 KeyCode::Esc => app.algorithm = None,
                 KeyCode::Right => algorithm_ui.status.as_ref().step_next(),
-                KeyCode::Left => algorithm_ui.status.as_ref().step_prev(),
+                KeyCode::Left => {
+                    if !algorithm_ui.auto_next {
+                        algorithm_ui.status.as_ref().step_prev()
+                    }
+                }
                 KeyCode::Char(' ') => algorithm_ui.auto_next = !algorithm_ui.auto_next,
                 _ => {}
             },
         }
     }
-    Ok(false)
+    return Action::Tick;
 }
 
 fn get_algorithm_func<'a>(s: String) -> impl FnOnce(&mut [i32], &dyn AlgorithmContext) {

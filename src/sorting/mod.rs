@@ -1,7 +1,5 @@
 use std::fmt::Display;
 
-use anyhow::Ok;
-
 pub mod bubble_sort;
 
 pub trait AlgorithmContext {
