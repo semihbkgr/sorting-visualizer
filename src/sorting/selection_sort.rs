@@ -3,17 +3,21 @@ use super::{
     Operation::{Compare, Noop, Swap},
 };
 
-pub const NAME: &str = "bubble sort";
+pub const NAME: &str = "selection sort";
 
 pub fn sort(nums: &mut [i32], ctx: &dyn AlgorithmContext) {
     let len = nums.len();
-    for i in 0..len {
-        for j in 0..len - i - 1 {
-            ctx.next(Compare(j, j + 1), nums.to_vec());
-            if nums[j] > nums[j + 1] {
-                nums.swap(j, j + 1);
-                ctx.next(Swap(j, j + 1), nums.to_vec());
+    for left in 0..len {
+        let mut smallest = left;
+        for right in (left + 1)..len {
+            ctx.next(Compare(smallest, right), nums.to_vec());
+            if nums[right] < nums[smallest] {
+                smallest = right;
             }
+        }
+        if smallest != left {
+            nums.swap(smallest, left);
+            ctx.next(Swap(left, smallest), nums.to_vec());
         }
     }
     ctx.next(Noop(), nums.to_vec());

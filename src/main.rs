@@ -11,7 +11,7 @@ use ratatui::{
 };
 use sorting_visualizer::{
     init_vec, shuffle,
-    sorting::{bubble_sort, AlgorithmContext, Operation},
+    sorting::{get_algorithm_func, get_algorithms, AlgorithmContext, Operation},
 };
 use std::{
     fmt::Display,
@@ -262,20 +262,16 @@ impl AlgorithmContext for AlgorithmStatus {
     }
 }
 
+// todo: handle terminal size
+// todo: reset algorithm
+
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend)?;
 
-    let app = App::new(vec![
-        "bubble sort",
-        "item1",
-        "item2",
-        "item3",
-        "item4",
-        "item5",
-    ]);
+    let app = App::new(get_algorithms());
     let tick_rate = Duration::from_millis(50);
     let res = run_app(&mut terminal, app, tick_rate);
 
@@ -391,12 +387,12 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> Action {
                 KeyCode::Up | KeyCode::Char('k') => app.list.previous(),
                 KeyCode::Enter => {
                     if let Some(i) = app.list.state.selected() {
-                        let name = app.list.items[i].to_string();
+                        let name = app.list.items[i];
                         let algorithm =
-                            AlgorithmUI::new(name.clone(), size, Duration::from_millis(200))
+                            AlgorithmUI::new(name.to_string(), size, Duration::from_millis(200))
                                 .unwrap();
                         let status = algorithm.status.clone();
-                        let algorithm_func = get_algorithm_func(name.clone());
+                        let algorithm_func = get_algorithm_func(name);
                         thread::spawn(move || {
                             algorithm_func(
                                 status.as_ref().nums.clone().as_mut_slice(),
@@ -422,13 +418,6 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> Action {
         }
     }
     return Action::Tick;
-}
-
-fn get_algorithm_func<'a>(s: String) -> impl FnOnce(&mut [i32], &dyn AlgorithmContext) {
-    match s.as_str() {
-        "bubble sort" => bubble_sort::sort,
-        _ => panic!("algorithm not found"),
-    }
 }
 
 fn center_area(width: u16, height: u16, s: Rect) -> Rect {
@@ -509,16 +498,5 @@ mod tests {
         assert_eq!(area.y, 12);
         assert_eq!(area.width, 32);
         assert_eq!(area.height, 8);
-    }
-
-    #[test]
-    fn test_get_algorithm_func() {
-        _ = get_algorithm_func(String::from("bubble sort"));
-    }
-
-    #[test]
-    #[should_panic(expected = "algorithm not found")]
-    fn test_get_algorithm_func_not_found() {
-        _ = get_algorithm_func(String::from("algorithm"));
     }
 }
