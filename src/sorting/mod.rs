@@ -1,9 +1,13 @@
 use std::fmt::Display;
 
 pub mod bubble_sort;
+pub mod comb_sort;
+pub mod heap_sort;
 pub mod insertion_sort;
 pub mod merge_sort;
+pub mod quick_sort;
 pub mod selection_sort;
+pub mod shell_sort;
 
 pub trait AlgorithmContext {
     fn next(&self, operation: Operation, nums: Vec<i32>);
@@ -15,6 +19,29 @@ pub enum Operation {
     Compare(usize, usize),
     Swap(usize, usize),
     Insert(usize),
+}
+
+impl Operation {
+    pub fn adjusted(&self) -> Self {
+        return match *self {
+            Self::Compare(a, b) => {
+                if a > b {
+                    Self::Compare(b, a)
+                } else {
+                    Self::Compare(a, b)
+                }
+            }
+            Self::Swap(a, b) => {
+                if a > b {
+                    Self::Swap(b, a)
+                } else {
+                    Self::Swap(a, b)
+                }
+            }
+            Self::Insert(i) => return Self::Insert(i),
+            Self::Noop() => return Self::Noop(),
+        };
+    }
 }
 
 impl Display for Operation {
@@ -40,6 +67,10 @@ pub fn get_algorithms() -> Vec<&'static str> {
         selection_sort::NAME,
         insertion_sort::NAME,
         merge_sort::NAME,
+        shell_sort::NAME,
+        heap_sort::NAME,
+        quick_sort::NAME,
+        comb_sort::NAME,
     ];
 }
 
@@ -49,6 +80,10 @@ pub fn get_algorithm_func<'a>(s: &str) -> impl FnOnce(&mut [i32], &dyn Algorithm
         selection_sort::NAME => selection_sort::sort,
         insertion_sort::NAME => insertion_sort::sort,
         merge_sort::NAME => merge_sort::sort,
+        shell_sort::NAME => shell_sort::sort,
+        heap_sort::NAME => heap_sort::sort,
+        quick_sort::NAME => quick_sort::sort,
+        comb_sort::NAME => comb_sort::sort,
         _ => panic!("algorithm not found"),
     }
 }

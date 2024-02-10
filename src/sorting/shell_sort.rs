@@ -3,23 +3,26 @@ use super::{
     Operation::{Compare, Noop, Swap},
 };
 
-pub const NAME: &str = "bubble sort";
+pub const NAME: &str = "shell sort";
 
 pub fn sort(nums: &mut [i32], ctx: &dyn AlgorithmContext) {
-    let len = nums.len();
-    for i in 0..len {
-        let mut swapped = false;
-        for j in 0..len - i - 1 {
-            ctx.next(Compare(j, j + 1), nums.to_vec());
-            if nums[j] > nums[j + 1] {
-                nums.swap(j, j + 1);
-                ctx.next(Swap(j, j + 1), nums.to_vec());
-                swapped = true;
+    let n = nums.len();
+    let mut gap = n / 2;
+    while gap > 0 {
+        for i in gap..n {
+            let mut j = i;
+            while j >= gap {
+                ctx.next(Compare(j - gap, j), nums.to_vec());
+                if nums[j - gap] > nums[j] {
+                    nums.swap(j - gap, j);
+                    ctx.next(Swap(j - gap, j), nums.to_vec());
+                    j -= gap;
+                } else {
+                    break;
+                }
             }
         }
-        if !swapped {
-            break;
-        }
+        gap /= 2;
     }
     ctx.next(Noop(), nums.to_vec());
 }
