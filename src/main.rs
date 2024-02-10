@@ -167,6 +167,18 @@ impl AlgorithmUI {
                     line.spans = vec![pre, a_span, mid, b_span, last];
                 }
             }
+            Operation::Insert(i) => {
+                for line in text.lines.iter_mut() {
+                    let line_content = line.spans[0].content.clone();
+                    let line_chars = line_content.chars().into_iter().collect::<Vec<char>>();
+                    let pre = Span::raw(line_chars[..*i].iter().collect::<String>());
+                    let span =
+                        Span::raw(line_chars[*i..*i + 1].iter().collect::<String>()).fg(Color::Red);
+                    let last = Span::raw(line_chars[*i + 1..].iter().collect::<String>());
+
+                    line.spans = vec![pre, span, last];
+                }
+            }
             _ => {}
         }
         return text;
@@ -236,6 +248,9 @@ impl AlgorithmStatus {
 
     fn step_next(&self) {
         let operations_len = self.operations.lock().unwrap().len();
+        if operations_len == 0 {
+            return;
+        }
         let mut index = self.index.lock().unwrap();
         if *index < operations_len - 1 {
             *index.deref_mut() = *index + 1;

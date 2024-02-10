@@ -25,6 +25,7 @@ pub fn sort(nums: &mut [i32], ctx: &dyn AlgorithmContext) {
 
 #[cfg(test)]
 mod tests {
+    use crate::sorting::has_nums;
     use crate::sorting::is_sorted;
     use crate::sorting::NoopContext;
 
@@ -35,5 +36,6 @@ mod tests {
         let nums = &mut [3, 5, 2, 8, 6, 9, 0, 1, 4, 7];
         sort(nums, &NoopContext);
         assert!(is_sorted(nums));
+        assert!(has_nums(nums));
     }
 }

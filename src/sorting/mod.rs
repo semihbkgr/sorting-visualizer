@@ -14,6 +14,7 @@ pub enum Operation {
     Noop(),
     Compare(usize, usize),
     Swap(usize, usize),
+    Insert(usize),
 }
 
 impl Display for Operation {
@@ -25,6 +26,9 @@ impl Display for Operation {
             }
             Self::Swap(a, b) => {
                 write!(f, "swap: {} {}", a, b)
+            }
+            Self::Insert(i) => {
+                write!(f, "insert: {}", i)
             }
         }
     }
@@ -60,6 +64,15 @@ fn is_sorted(nums: &[i32]) -> bool {
     nums.windows(2).all(|w| w[0] <= w[1])
 }
 
+fn has_nums(nums: &[i32]) -> bool {
+    for e in 0..=9 {
+        if !nums.contains(&e) {
+            return false;
+        }
+    }
+    return true;
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -75,5 +88,3 @@ mod test {
         _ = get_algorithm_func("algorithm");
     }
 }
-
-//todo: call Noop outside of the algorithm fn
