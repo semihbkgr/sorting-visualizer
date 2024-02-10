@@ -136,18 +136,18 @@ impl AlgorithmUI {
             result.push('\n');
         }
         let mut text = Text::raw(result);
-        match operation {
+        match operation.adjusted() {
             Operation::Compare(a, b) => {
                 for line in text.lines.iter_mut() {
                     let line_content = line.spans[0].content.clone();
                     let line_chars = line_content.chars().into_iter().collect::<Vec<char>>();
-                    let pre = Span::raw(line_chars[..*a].iter().collect::<String>());
-                    let a_span = Span::raw(line_chars[*a..*a + 1].iter().collect::<String>())
+                    let pre = Span::raw(line_chars[..a].iter().collect::<String>());
+                    let a_span = Span::raw(line_chars[a..a + 1].iter().collect::<String>())
                         .fg(Color::LightCyan);
-                    let mid = Span::raw(line_chars[*a + 1..*b].iter().collect::<String>());
-                    let b_span = Span::raw(line_chars[*b..*b + 1].iter().collect::<String>())
+                    let mid = Span::raw(line_chars[a + 1..b].iter().collect::<String>());
+                    let b_span = Span::raw(line_chars[b..b + 1].iter().collect::<String>())
                         .fg(Color::LightCyan);
-                    let last = Span::raw(line_chars[*b + 1..].iter().collect::<String>());
+                    let last = Span::raw(line_chars[b + 1..].iter().collect::<String>());
 
                     line.spans = vec![pre, a_span, mid, b_span, last];
                 }
@@ -156,13 +156,13 @@ impl AlgorithmUI {
                 for line in text.lines.iter_mut() {
                     let line_content = line.spans[0].content.clone();
                     let line_chars = line_content.chars().into_iter().collect::<Vec<char>>();
-                    let pre = Span::raw(line_chars[..*a].iter().collect::<String>());
-                    let a_span = Span::raw(line_chars[*a..*a + 1].iter().collect::<String>())
+                    let pre = Span::raw(line_chars[..a].iter().collect::<String>());
+                    let a_span = Span::raw(line_chars[a..a + 1].iter().collect::<String>())
                         .fg(Color::LightGreen);
-                    let mid = Span::raw(line_chars[*a + 1..*b].iter().collect::<String>());
-                    let b_span = Span::raw(line_chars[*b..*b + 1].iter().collect::<String>())
+                    let mid = Span::raw(line_chars[a + 1..b].iter().collect::<String>());
+                    let b_span = Span::raw(line_chars[b..b + 1].iter().collect::<String>())
                         .fg(Color::LightGreen);
-                    let last = Span::raw(line_chars[*b + 1..].iter().collect::<String>());
+                    let last = Span::raw(line_chars[b + 1..].iter().collect::<String>());
 
                     line.spans = vec![pre, a_span, mid, b_span, last];
                 }
@@ -171,10 +171,10 @@ impl AlgorithmUI {
                 for line in text.lines.iter_mut() {
                     let line_content = line.spans[0].content.clone();
                     let line_chars = line_content.chars().into_iter().collect::<Vec<char>>();
-                    let pre = Span::raw(line_chars[..*i].iter().collect::<String>());
-                    let span = Span::raw(line_chars[*i..*i + 1].iter().collect::<String>())
+                    let pre = Span::raw(line_chars[..i].iter().collect::<String>());
+                    let span = Span::raw(line_chars[i..i + 1].iter().collect::<String>())
                         .fg(Color::LightYellow);
-                    let last = Span::raw(line_chars[*i + 1..].iter().collect::<String>());
+                    let last = Span::raw(line_chars[i + 1..].iter().collect::<String>());
 
                     line.spans = vec![pre, span, last];
                 }
@@ -378,7 +378,7 @@ fn ui(frame: &mut Frame, app: &mut App) {
 
             if !algorithm.auto_next {
                 let (step, operation) = algorithm.status.step_info();
-                let info = format!("step: {}\n{}", step, operation);
+                let info = format!("step: {}\n{}", step, operation.adjusted());
                 let text_info = Text::from(info);
                 let paragraph_info = Paragraph::new(text_info).alignment(Alignment::Left);
                 let next_area = next_area_vertical(area, 2, 1);
