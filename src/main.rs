@@ -143,10 +143,10 @@ impl AlgorithmUI {
                     let line_chars = line_content.chars().into_iter().collect::<Vec<char>>();
                     let pre = Span::raw(line_chars[..*a].iter().collect::<String>());
                     let a_span = Span::raw(line_chars[*a..*a + 1].iter().collect::<String>())
-                        .fg(Color::LightBlue);
+                        .fg(Color::LightCyan);
                     let mid = Span::raw(line_chars[*a + 1..*b].iter().collect::<String>());
                     let b_span = Span::raw(line_chars[*b..*b + 1].iter().collect::<String>())
-                        .fg(Color::LightBlue);
+                        .fg(Color::LightCyan);
                     let last = Span::raw(line_chars[*b + 1..].iter().collect::<String>());
 
                     line.spans = vec![pre, a_span, mid, b_span, last];
@@ -158,10 +158,10 @@ impl AlgorithmUI {
                     let line_chars = line_content.chars().into_iter().collect::<Vec<char>>();
                     let pre = Span::raw(line_chars[..*a].iter().collect::<String>());
                     let a_span = Span::raw(line_chars[*a..*a + 1].iter().collect::<String>())
-                        .fg(Color::Green);
+                        .fg(Color::LightGreen);
                     let mid = Span::raw(line_chars[*a + 1..*b].iter().collect::<String>());
                     let b_span = Span::raw(line_chars[*b..*b + 1].iter().collect::<String>())
-                        .fg(Color::Green);
+                        .fg(Color::LightGreen);
                     let last = Span::raw(line_chars[*b + 1..].iter().collect::<String>());
 
                     line.spans = vec![pre, a_span, mid, b_span, last];
@@ -172,8 +172,8 @@ impl AlgorithmUI {
                     let line_content = line.spans[0].content.clone();
                     let line_chars = line_content.chars().into_iter().collect::<Vec<char>>();
                     let pre = Span::raw(line_chars[..*i].iter().collect::<String>());
-                    let span =
-                        Span::raw(line_chars[*i..*i + 1].iter().collect::<String>()).fg(Color::Red);
+                    let span = Span::raw(line_chars[*i..*i + 1].iter().collect::<String>())
+                        .fg(Color::LightYellow);
                     let last = Span::raw(line_chars[*i + 1..].iter().collect::<String>());
 
                     line.spans = vec![pre, span, last];
@@ -277,9 +277,6 @@ impl AlgorithmContext for AlgorithmStatus {
     }
 }
 
-// todo: handle terminal size
-// todo: reset algorithm
-
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
@@ -342,7 +339,11 @@ fn ui(frame: &mut Frame, app: &mut App) {
 
             let width = WIDTH + 2;
             let height = HEIGHT * 2 + 2;
-            let area = center_area(width, height, frame.size());
+            let area_option = center_area(width, height, frame.size());
+            if area_option.is_none() {
+                return;
+            }
+            let area = area_option.unwrap();
 
             let list = widgets::List::new(list_items)
                 .block(Block::default().borders(Borders::ALL).border_type(Rounded))
@@ -359,7 +360,11 @@ fn ui(frame: &mut Frame, app: &mut App) {
 
             let blocks_width = algorithm.size.0 + 2;
             let blocks_height = algorithm.size.1 + 2;
-            let area = center_area(blocks_width, blocks_height, frame.size());
+            let area_option = center_area(blocks_width, blocks_height, frame.size());
+            if area_option.is_none() {
+                return;
+            }
+            let area = area_option.unwrap();
 
             let text = algorithm.display_text();
             let paragraph = Paragraph::new(text).alignment(Alignment::Center).block(
@@ -420,6 +425,9 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> Action {
                 _ => {}
             },
             Some(algorithm_ui) => match key.code {
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    return Action::Quit
+                }
                 KeyCode::Esc => app.algorithm = None,
                 KeyCode::Right => algorithm_ui.status.as_ref().step_next(),
                 KeyCode::Left => {
@@ -435,10 +443,13 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> Action {
     return Action::Tick;
 }
 
-fn center_area(width: u16, height: u16, s: Rect) -> Rect {
+fn center_area(width: u16, height: u16, s: Rect) -> Option<Rect> {
+    if s.width < width || s.height < height {
+        return None;
+    }
     let x_position = (s.width - width) / 2;
     let y_position = (s.height - height) / 2;
-    Rect::new(x_position, y_position, width, height)
+    Some(Rect::new(x_position, y_position, width, height))
 }
 
 fn next_area_vertical(s: Rect, height: u16, width_padding: u16) -> Rect {
@@ -508,7 +519,9 @@ mod tests {
 
     #[test]
     fn test_center_area() {
-        let area = center_area(32, 8, Rect::new(0, 0, 128, 32));
+        let area_option = center_area(32, 8, Rect::new(0, 0, 128, 32));
+        assert!(area_option.is_some());
+        let area = area_option.unwrap();
         assert_eq!(area.x, 48);
         assert_eq!(area.y, 12);
         assert_eq!(area.width, 32);

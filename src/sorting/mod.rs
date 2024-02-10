@@ -64,6 +64,7 @@ fn is_sorted(nums: &[i32]) -> bool {
     nums.windows(2).all(|w| w[0] <= w[1])
 }
 
+#[cfg(test)]
 fn has_nums(nums: &[i32]) -> bool {
     for e in 0..=9 {
         if !nums.contains(&e) {
