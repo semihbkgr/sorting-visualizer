@@ -14,7 +14,7 @@ use sorting_visualizer::{
     sorting::{get_algorithm_func, get_algorithms, AlgorithmContext, Operation},
 };
 use std::{
-    fmt::Display,
+    fmt::{Debug, Display},
     io::{self, stdout},
     ops::{DerefMut, Index},
     sync::{Arc, Mutex},
@@ -80,7 +80,8 @@ struct App<'a> {
 }
 
 impl<'a> App<'a> {
-    fn new(list_items: Vec<&'a str>) -> App<'a> {
+    fn new(mut list_items: Vec<&'a str>) -> App<'a> {
+        list_items.sort();
         App {
             list: List::new(list_items),
             algorithm: Option::None,
@@ -100,6 +101,7 @@ struct AlgorithmUI {
     auto_next: bool,
     tick_rate: Duration,
     last_tick: Duration,
+    muted: bool,
 }
 
 impl AlgorithmUI {
@@ -112,6 +114,7 @@ impl AlgorithmUI {
             auto_next: true,
             tick_rate,
             last_tick: Duration::ZERO,
+            muted: true,
         })
     }
 
@@ -184,14 +187,15 @@ impl AlgorithmUI {
         return text;
     }
 
-    fn tick(&mut self) {
+    fn tick(&mut self) -> bool {
         if self.auto_next {
             let current_duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
             if self.last_tick + self.tick_rate < current_duration {
                 self.last_tick = current_duration;
-                self.status.as_ref().step_next();
+                return self.status.as_ref().step_next();
             }
         }
+        return false;
     }
 }
 
@@ -246,15 +250,17 @@ impl AlgorithmStatus {
         };
     }
 
-    fn step_next(&self) {
+    fn step_next(&self) -> bool {
         let operations_len = self.operations.lock().unwrap().len();
         if operations_len == 0 {
-            return;
+            return false;
         }
         let mut index = self.index.lock().unwrap();
         if *index < operations_len - 1 {
             *index.deref_mut() = *index + 1;
+            return true;
         }
+        return false;
     }
 
     fn step_prev(&self) {
@@ -356,7 +362,10 @@ fn ui(frame: &mut Frame, app: &mut App) {
             frame.render_stateful_widget(list, area, &mut app.list.state);
         }
         Some(algorithm) => {
-            algorithm.tick();
+            let next = algorithm.tick();
+            if next && !algorithm.muted {
+                beep();
+            }
 
             let blocks_width = algorithm.size.0 + 2;
             let blocks_height = algorithm.size.1 + 2;
@@ -383,7 +392,6 @@ fn ui(frame: &mut Frame, app: &mut App) {
                 let paragraph_info = Paragraph::new(text_info).alignment(Alignment::Left);
                 let next_area = next_area_vertical(area, 2, 1);
                 frame.render_widget(paragraph_info, next_area);
-
                 return;
             }
         }
@@ -429,13 +437,19 @@ fn handle_key_events(key: KeyEvent, app: &mut App, size: Rect) -> Action {
                     return Action::Quit
                 }
                 KeyCode::Esc => app.algorithm = None,
-                KeyCode::Right => algorithm_ui.status.as_ref().step_next(),
+                KeyCode::Right => {
+                    let next = algorithm_ui.status.as_ref().step_next();
+                    if next && !algorithm_ui.muted {
+                        beep();
+                    }
+                }
                 KeyCode::Left => {
                     if !algorithm_ui.auto_next {
                         algorithm_ui.status.as_ref().step_prev()
                     }
                 }
                 KeyCode::Char(' ') => algorithm_ui.auto_next = !algorithm_ui.auto_next,
+                KeyCode::Char('m') => algorithm_ui.muted = !algorithm_ui.muted,
                 _ => {}
             },
         }
@@ -459,6 +473,10 @@ fn next_area_vertical(s: Rect, height: u16, width_padding: u16) -> Rect {
         s.width - width_padding * 2,
         height,
     )
+}
+
+fn beep() {
+    print!("\x07");
 }
 
 #[cfg(test)]
