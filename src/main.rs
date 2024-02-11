@@ -14,7 +14,7 @@ use sorting_visualizer::{
     sorting::{get_algorithm_func, get_algorithms, AlgorithmContext, Operation},
 };
 use std::{
-    fmt::{Debug, Display},
+    fmt::Display,
     io::{self, stdout},
     ops::{DerefMut, Index},
     sync::{Arc, Mutex},
